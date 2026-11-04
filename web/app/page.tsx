@@ -12,20 +12,25 @@ const RADII = [1000, 3000, 5000, 10000];
 
 const SUGGESTIONS = [
   "blue dress medium size",
-  "black kurta L",
+  "mobile screen repair",
+  "pant alteration tailor",
   "powerbank 10000mAh",
+  "plumber for pipe leak",
+  "laptop battery replacement",
   "t-shirt white XL",
-  "formal shoes size 9",
-  "jeans slim fit 32",
+  "dry cleaning suit",
 ];
 
 const POPULAR_CATEGORIES = [
-  { icon: "👗", label: "Fashion" },
-  { icon: "📱", label: "Electronics" },
-  { icon: "🥦", label: "Groceries" },
-  { icon: "👟", label: "Footwear" },
-  { icon: "🏠", label: "Home" },
-  { icon: "💊", label: "Pharmacy" },
+  { icon: "👗", label: "Fashion", query: "dress medium" },
+  { icon: "📱", label: "Mobile Repair", query: "mobile screen repair" },
+  { icon: "🪡", label: "Tailoring", query: "pant alteration tailor" },
+  { icon: "🔧", label: "Plumbing", query: "plumber pipe repair" },
+  { icon: "💻", label: "Laptop Clinic", query: "laptop service repair" },
+  { icon: "⚡", label: "Electrician", query: "electrician wiring repair" },
+  { icon: "🔋", label: "Electronics", query: "powerbank 10000" },
+  { icon: "🧺", label: "Dry Cleaning", query: "dry cleaning laundry" },
+  { icon: "💊", label: "Pharmacy", query: "paracetamol medicines" },
 ];
 
 export default function Home() {
@@ -101,11 +106,11 @@ export default function Home() {
       {/* ---- Hero ---- */}
       <section className="hero">
         <h1>
-          Does a nearby shop<br />have it <em>right now</em>?
+          Does a nearby place<br />have it <em>right now</em>?
         </h1>
         <p className="tagline">
-          We ask shops live — WhatsApp first, then a voice call —
-          and stream their answers back before you leave home.
+          Real-time inventory & local service finder. We ask nearby shops & service providers live —
+          WhatsApp first, then an AI call — before you leave home.
         </p>
       </section>
 
@@ -140,7 +145,7 @@ export default function Home() {
           <input
             ref={inputRef}
             autoFocus
-            placeholder="blue dress medium size…"
+            placeholder="Search product or service (e.g. mobile repair, blue dress M, plumber)..."
             value={text}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && go()}
@@ -215,19 +220,19 @@ export default function Home() {
       )}
 
       {/* ---- Categories ---- */}
-      <p className="section-header">Browse categories</p>
+      <p className="section-header">Browse categories & services</p>
       <div className="grid3" style={{ gap: 10 }}>
         {POPULAR_CATEGORIES.map((cat) => (
           <button
             key={cat.label}
-            onClick={() => useSuggestion(cat.label.toLowerCase())}
+            onClick={() => useSuggestion(cat.query)}
             style={{
               background: "var(--card)",
               borderRadius: "var(--r-lg)",
               padding: "16px 10px",
               display: "flex", flexDirection: "column", alignItems: "center", gap: 6,
               boxShadow: "0 1px 0 var(--line), 0 2px 8px rgba(0,0,0,0.04)",
-              minHeight: 76, fontSize: 14, fontWeight: 500, color: "var(--ink)",
+              minHeight: 76, fontSize: 13, fontWeight: 500, color: "var(--ink)",
             }}
           >
             <span style={{ fontSize: 24 }}>{cat.icon}</span>

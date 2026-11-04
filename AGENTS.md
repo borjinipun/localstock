@@ -22,12 +22,14 @@
 
 ## 1. Product Vision
 
-**Problem**: In Indian cities, most retail inventory lives in small independent shops — none of which are on Zomato, Blinkit, or Amazon. A buyer has no way to know if the shop three streets away has the right size, colour, or model *right now* without physically going there or calling manually.
+**Problem**: In Indian cities, most retail inventory and skilled local services (tailoring, mobile repair, plumbing, electrician, dry cleaning) live in small independent shops — none of which are on Zomato, Blinkit, or Amazon. A buyer has no way to know if a shop three streets away has the right size, colour, model, or immediate service slot *right now* without physically going there or calling manually.
 
-**Solution**: LocalStock bridges the gap between online search intent and offline shop inventory by:
-- Parsing a buyer's natural language query into structured intent (item, colour, size, budget).
-- Matching against shops' self-reported catalogs (instant, 48-hour freshness window).
-- Calling shops that haven't self-reported — via **WhatsApp message first, then an AI voice call** — and streaming the answers back to the buyer in real time.
+**Solution**: LocalStock bridges the gap between online search intent and offline local capability by:
+- **Location-first discovery**: Geolocation & radius-based candidate identification (Haversine proximity + capability matching).
+- **Dual Coverage**: Searches both **physical retail inventory** AND **local services** (mobile repair, tailoring/alterations, plumbing, electronics servicing, etc.).
+- **Smart intent parser**: Parses natural language queries into structured intent, action verbs, categories, sizes, colours, and price bands.
+- **Catalog & Candidate Outreach**: Matches against fresh self-reported catalogs (instant 48-hour hits) AND automatically discovers nearby shops/service providers with verified contact numbers to reach out via WhatsApp & AI voice calls.
+- **Real-time live stream**: Streams answers, price quotes, transcripts, and walking distance back to the buyer before they leave home.
 
 **Tagline**: *"Does a nearby shop have it right now?"*
 

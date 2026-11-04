@@ -16,20 +16,25 @@ import {
 } from "../../../lib/api";
 
 /* ---- Badge mapping ---- */
-const BADGE: Record<string, { cls: string; label: string; icon: string }> = {
-  CONFIRMED_IN_STOCK:     { cls: "in",   label: "Verified in stock",     icon: "✓" },
-  SHOP_REPORTED_IN_STOCK: { cls: "shop", label: "Catalog: in stock",     icon: "📋" },
-  CONFIRMED_OUT_OF_STOCK: { cls: "no",   label: "Confirmed unavailable", icon: "✕" },
-  ALTERNATIVE_OFFERED:    { cls: "shop", label: "Alternative offered",   icon: "↔" },
-  CONDITIONAL:            { cls: "wait", label: "Conditional",           icon: "⏳" },
-  UNREACHABLE:            { cls: "na",   label: "Couldn't reach",        icon: "📵" },
-  NO_ANSWER:              { cls: "na",   label: "No answer",             icon: "🔇" },
-  UNCERTAIN:              { cls: "na",   label: "Uncertain",             icon: "❓" },
-  OPT_OUT_FLAGGED:        { cls: "na",   label: "Shop opted out",        icon: "🚫" },
+const BADGE: Record<string, { cls: string; label: string; serviceLabel: string; icon: string }> = {
+  CONFIRMED_IN_STOCK:     { cls: "in",   label: "Verified in stock",     serviceLabel: "Service available",   icon: "✓" },
+  SHOP_REPORTED_IN_STOCK: { cls: "shop", label: "Catalog: in stock",     serviceLabel: "Catalog service",     icon: "📋" },
+  CONFIRMED_OUT_OF_STOCK: { cls: "no",   label: "Confirmed unavailable", serviceLabel: "Currently unavailable", icon: "✕" },
+  ALTERNATIVE_OFFERED:    { cls: "shop", label: "Alternative offered",   serviceLabel: "Alternative timing", icon: "↔" },
+  CONDITIONAL:            { cls: "wait", label: "Conditional",           serviceLabel: "Available with timing", icon: "⏳" },
+  UNREACHABLE:            { cls: "na",   label: "Couldn't reach",        serviceLabel: "Couldn't reach",      icon: "📵" },
+  NO_ANSWER:              { cls: "na",   label: "No answer",             serviceLabel: "No answer",           icon: "🔇" },
+  UNCERTAIN:              { cls: "na",   label: "Uncertain",             serviceLabel: "Reviewing",           icon: "❓" },
+  OPT_OUT_FLAGGED:        { cls: "na",   label: "Place opted out",       serviceLabel: "Place opted out",     icon: "🚫" },
 };
 
-function badge(state: string) {
-  return BADGE[state] || { cls: "na", label: state, icon: "•" };
+function badge(state: string, isService: boolean = false) {
+  const b = BADGE[state] || { cls: "na", label: state, serviceLabel: state, icon: "•" };
+  return {
+    cls: b.cls,
+    label: isService ? b.serviceLabel : b.label,
+    icon: b.icon,
+  };
 }
 
 export default function Results() {
@@ -92,6 +97,8 @@ export default function Results() {
     </div>
   );
 
+  const isService = detail?.parsed?.intent_type === "service";
+
   const done = detail?.status === "completed";
   const inStock = ordered.filter((r) => r.state === "CONFIRMED_IN_STOCK" || r.state === "SHOP_REPORTED_IN_STOCK");
   const progress = done ? 100 : Math.min(90, results.length * 14);
@@ -134,6 +141,9 @@ export default function Results() {
         {/* Parsed chips */}
         {detail?.parsed && (
           <div className="chiprow" style={{ margin: "8px 0 0" }}>
+            <span className="chip" style={{ fontSize: 13, minHeight: 28, background: isService ? "rgba(88,86,214,0.12)" : "rgba(0,122,255,0.12)" }}>
+              {isService ? "🛠 Service" : "🛍 Product"}
+            </span>
             {detail.parsed.item_labels?.map((l: string) => (
               <span key={l} className="chip" style={{ fontSize: 13, minHeight: 28 }}>{l}</span>
             ))}
@@ -148,8 +158,8 @@ export default function Results() {
           <div className="row spread" style={{ marginBottom: 6 }}>
             <span className="caption">
               {done
-                ? `${ordered.length} shops checked · ${inStock.length} have it`
-                : `Checking ${results.length} shops so far…`}
+                ? `${ordered.length} places checked · ${inStock.length} confirmed ${isService ? "available" : "in stock"}`
+                : `Checking ${results.length} places nearby live…`}
             </span>
             <span className={`badge ${done ? "in" : "wait"}`}>
               {done ? "✓ Done" : "Live"}
@@ -164,23 +174,28 @@ export default function Results() {
         <div className="notice ok result-card" style={{ marginBottom: 12 }}>
           <span style={{ fontSize: 18 }}>✅</span>
           <span>
-            <strong>{inStock.length} shop{inStock.length > 1 ? "s have" : " has"} it in stock</strong>
-            {" "}— tap a card below to call or get directions.
+            <strong>
+              {inStock.length} {isService ? "service provider" : "shop"}{inStock.length > 1 ? "s" : ""} confirmed {isService ? "available" : "in stock"}
+            </strong>
+            {" "}— tap below to call or get directions.
           </span>
         </div>
       )}
       {done && inStock.length === 0 && ordered.length > 0 && (
         <div className="notice warn result-card" style={{ marginBottom: 12 }}>
           <span style={{ fontSize: 18 }}>📭</span>
-          <span>None of the nearby shops confirmed stock. Try a wider radius or different query.</span>
+          <span>None of the nearby places confirmed availability right now. Try expanding your search radius.</span>
         </div>
       )}
 
       {/* ---- Result cards ---- */}
       {ordered.map((r, idx) => {
-        const b = badge(r.state);
+        const b = badge(r.state, isService);
         const dist = fmtDistance(r.distance_km);
         const walk = walkingMin(r.distance_km);
+        const waText = isService
+          ? `Hi, I found your listing on LocalStock. Do you provide ${parsedText || "this service"} today?`
+          : `Hi, I found your shop on LocalStock. Do you have ${parsedText || "this item"} in stock right now?`;
         return (
           <div
             key={r.id}
@@ -217,8 +232,8 @@ export default function Results() {
               <div className="chiprow" style={{ margin: "10px 0 0" }}>
                 {r.sizes.map((s) => <span key={s} className="chip" style={{ fontSize: 12, minHeight: 28 }}>📐 {s}</span>)}
                 {r.colors.map((c) => <span key={c} className="chip" style={{ fontSize: 12, minHeight: 28 }}>🎨 {c}</span>)}
-                {r.price_text && <span className="chip" style={{ fontSize: 12, minHeight: 28 }}>₹{r.price_text}</span>}
-                {r.condition_text && <span className="chip" style={{ fontSize: 12, minHeight: 28 }}>⏳ {r.condition_text}</span>}
+                {r.price_text && <span className="chip" style={{ fontSize: 12, minHeight: 28 }}>💰 {r.price_text}</span>}
+                {r.condition_text && <span className="chip" style={{ fontSize: 12, minHeight: 28 }}>⏱️ {r.condition_text}</span>}
               </div>
             )}
 
@@ -240,7 +255,7 @@ export default function Results() {
               )}
               {r.shop_phone && (
                 <a
-                  href={whatsappLink(r.shop_phone, `Hi, do you have ${parsedText || "this item"}?`)}
+                  href={whatsappLink(r.shop_phone, waText)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="chip"

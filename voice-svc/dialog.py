@@ -20,14 +20,38 @@ COND_TEMPLATE = "आधे घंटे बाद आ जाओगे तो म
 
 
 def _item_desc(item_intent):
+    intent_type = item_intent.get("intent_type") or "product"
     color = item_intent.get("color") or "नीला"
     size = item_intent.get("size") or "M"
-    label = (item_intent.get("item_labels") or ["ड्रेस"])[0]
-    return color, size, label
+    labels = item_intent.get("item_labels") or []
+    label = labels[0] if labels else ("सर्विस" if intent_type == "service" else "ड्रेस")
+    return color, size, label, intent_type
 
 
 def yes_payload(behavior, channel, item_intent, target_id, attempt_id):
-    color, size, _ = _item_desc(item_intent)
+    color, size, label, intent_type = _item_desc(item_intent)
+    if intent_type == "service":
+        price = item_intent.get("price_max") or 450
+        transcript = (
+            f"bot(automated disclosure): नमस्ते! LocalStock से कॉल है — ग्राहक पूछ रहा है: क्या आपके यहाँ {label} की सर्विस उपलब्ध है?\n"
+            f"shop: हाँ, {label} कर देंगे। लगभग ₹{price} खर्च आएगा, 1 घंटे में रेडी हो जाएगा।\n"
+            "bot: बहुत धन्यवाद! ग्राहक को अपडेट कर रहे हैं।"
+        )
+        return {
+            "target_id": target_id,
+            "attempt_id": attempt_id,
+            "channel": channel,
+            "outcome": "CONFIRMED_IN_STOCK",
+            "sizes": [],
+            "price_text": f"₹{price}",
+            "condition_text": "Service ready · ~1 hr turnaround",
+            "transcript": transcript,
+            "asr_confidence": 0.94,
+            "provider_events": [{"event": "ringing"}, {"event": "answered"},
+                                {"event": "transcript.hey_reply"}, {"event": "ended", "reason": "completed"}],
+            "recording_s3_key": f"mock-recordings/{target_id}-{uuid.uuid4().hex[:8]}.ogg",
+        }
+
     transcript = (
         "bot(automated disclosure): " + ASK_TEMPLATE.format(item="", color=color, size=size) + "\n"
         f"shop: {YES_TEMPLATE.format(color=color, size=size, extra=' और L भी', price='₹1,999 (MRP ₹2,499)')}\n"
@@ -50,6 +74,27 @@ def yes_payload(behavior, channel, item_intent, target_id, attempt_id):
 
 
 def alternative_payload(behavior, channel, item_intent, target_id, attempt_id):
+    color, size, label, intent_type = _item_desc(item_intent)
+    if intent_type == "service":
+        transcript = (
+            f"bot: क्या {label} का काम आज तुरंत हो जाएगा?\n"
+            f"shop: आज के स्लॉट बुक हैं, कल दोपहर 12 बजे तक ले आइये, हो जाएगा।\n"
+            "bot: धन्यवाद!"
+        )
+        return {
+            "target_id": target_id,
+            "attempt_id": attempt_id,
+            "channel": channel,
+            "outcome": "CONDITIONAL",
+            "sizes": [],
+            "price_text": f"₹{item_intent.get('price_max') or 350}",
+            "condition_text": "Tomorrow from 12 PM onwards",
+            "transcript": transcript,
+            "asr_confidence": 0.90,
+            "provider_events": [{"event": "ringing"}, {"event": "answered"}, {"event": "ended"}],
+            "recording_s3_key": "",
+        }
+
     transcript = (
         "bot: " + ASK_TEMPLATE.format(item="", color="नीला", size="M") + "\n"
         "shop: नहीं, नीला नहीं है — काला और मरून मिल जायेगा\n"
@@ -71,6 +116,22 @@ def alternative_payload(behavior, channel, item_intent, target_id, attempt_id):
 
 
 def conditional_payload(behavior, channel, item_intent, target_id, attempt_id):
+    color, size, label, intent_type = _item_desc(item_intent)
+    if intent_type == "service":
+        return {
+            "target_id": target_id,
+            "attempt_id": attempt_id,
+            "channel": channel,
+            "outcome": "CONDITIONAL",
+            "sizes": [],
+            "price_text": "",
+            "condition_text": "Technician available after 4:00 PM",
+            "transcript": f"bot: क्या {label} का काम हो जाएगा?\nshop: हाँ, कारीगर शाम 4 बजे के बाद फ्री होगा।\nbot: ठीक है, धन्यवाद।",
+            "asr_confidence": 0.9,
+            "provider_events": [{"event": "ringing"}, {"event": "answered"}, {"event": "ended"}],
+            "recording_s3_key": "",
+        }
+
     return {
         "target_id": target_id,
         "attempt_id": attempt_id,

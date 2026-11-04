@@ -76,6 +76,73 @@ def test_parse_size_alias_and_price():
     assert p["price_max"] == 900
 
 
+def test_parse_services_intent():
+    # Test mobile repair service parsing
+    p1 = parse_text("mobile screen repair under 1500")
+    assert p1["intent_type"] == "service"
+    assert "service.mobile_repair" in p1["item_codes"]
+    assert p1["price_max"] == 1500
+    assert "mobile_repair" in p1["target_verticals"]
+
+    # Test tailoring / alteration service parsing
+    p2 = parse_text("blouse stitching tailor near me")
+    assert p2["intent_type"] == "service"
+    assert "service.tailor" in p2["item_codes"]
+    assert "tailoring" in p2["target_verticals"]
+
+    # Test plumbing service parsing
+    p3 = parse_text("plumber for pipe leak repair")
+    assert p3["intent_type"] == "service"
+    assert "service.plumber" in p3["item_codes"]
+
+
+@pytest.mark.django_db
+def test_location_and_service_place_discovery(monkeypatch):
+    """Test that location-based search discovers nearby service providers with contact numbers."""
+    from apps.verification import services
+    monkeypatch.setattr(services, "start_verification", lambda tid: None)
+
+    city = City.objects.create(code="pune_srv", name="Pune", center_lat=Decimal("18.5204"),
+                               center_lng=Decimal("73.8567"), is_live=True)
+    # Pre-seed a mobile repair shop with a phone number
+    repair_shop = Shop.objects.create(
+        display_name="QuickFix Mobile & Laptop Repair",
+        verticals=["mobile_repair", "electronics"],
+        city=city,
+        lat=Decimal("18.5215"),
+        lng=Decimal("73.8575"),
+        ops_phone="919876543210",
+        public_phone="+919876543210",
+        whatsapp_number="919876543210",
+        whatsapp_linked=True,
+        claimed_at=timezone.now(),
+        current_plan="free",
+        mock_behavior="always_yes",
+    )
+
+    api = APIClient()
+    resp = api.post("/api/v1/queries", {
+        "text": "mobile screen repair",
+        "city": "pune_srv",
+        "location": {"lat": 18.5204, "lng": 73.8567},
+        "radius_m": 3000,
+    }, format="json")
+    assert resp.status_code == 202
+    body = resp.json()
+    qid = body["query_id"]
+
+    query = Query.objects.get(id=qid)
+    assert query.parsed_intent["intent_type"] == "service"
+
+    # Targets must include our repair shop
+    targets = QueryTarget.objects.filter(query=query)
+    target_shop_ids = [t.shop_id for t in targets]
+    assert repair_shop.id in target_shop_ids
+    # Contact decision must contain contact details and distance
+    t = targets.get(shop=repair_shop)
+    assert t.contact_decision.get("contact_number") or repair_shop.ops_phone
+
+
 @pytest.mark.django_db
 def test_query_pipeline_instant_and_wave(monkeypatch):
     """End-to-end sans broker/provider: build targets; apply mock webhook manually."""

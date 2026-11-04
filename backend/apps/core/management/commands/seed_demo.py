@@ -48,48 +48,67 @@ class Command(BaseCommand):
         now = timezone.now()
         valid_until = now + timedelta(hours=48)
 
+        SHOP_PRESETS = [
+            # Fashion Products & Tailoring Services
+            {"name": "Style Studio & Fashion Boutique", "verticals": ["fashion"], "catalog": "fashion.dress"},
+            {"name": "Royal Men's Apparel & Kurtas", "verticals": ["fashion"], "catalog": "fashion.kurti"},
+            {"name": "Master Stitch Tailors & Alterations", "verticals": ["tailoring", "fashion"], "catalog": "service.tailor"},
+            # Electronics & Repair Services
+            {"name": "QuickFix Mobile & Laptop Repair", "verticals": ["mobile_repair", "electronics"], "catalog": "service.mobile_repair"},
+            {"name": "Apex Electronics & Power Hub", "verticals": ["electronics"], "catalog": "electronics.powerbank"},
+            {"name": "CyberTech Computer & Screen Care", "verticals": ["laptop_repair", "electronics"], "catalog": "service.laptop_repair"},
+            # Home Services & Hardware
+            {"name": "Metro Hardware & Plumbing Solutions", "verticals": ["plumbing", "hardware"], "catalog": "service.plumber"},
+            {"name": "PowerLine Electricals & Wiring Hub", "verticals": ["electrician", "hardware"], "catalog": "service.electrician"},
+            # Essentials & Pharmacy
+            {"name": "Lifeline Chemist & Medical Store", "verticals": ["pharmacy"], "catalog": "pharmacy.medicine"},
+            {"name": "Sparkle Dry Cleaners & Laundry", "verticals": ["laundry"], "catalog": "service.laundry"},
+            {"name": "City Kirana & Daily Provisions", "verticals": ["groceries"], "catalog": "groceries.atta"},
+            {"name": "Urban Edge Apparel (Unclaimed)", "verticals": ["fashion"], "catalog": "fashion.dress"},
+        ]
+
         made = 0
-        for i in range(12):
-            city = City.objects.get(code="pune" if i < 9 else "mumbai")
-            lat = float(city.center_lat) + random.uniform(-0.02, 0.02)
-            lng = float(city.center_lng) + random.uniform(-0.02, 0.02)
+        for i, preset in enumerate(SHOP_PRESETS):
+            city = City.objects.get(code="pune" if i < 8 else "mumbai")
+            lat = float(city.center_lat) + random.uniform(-0.015, 0.015)
+            lng = float(city.center_lng) + random.uniform(-0.015, 0.015)
             phone_base = 919000000001 + i
             behavior = behaviors[i % len(behaviors)]
+            is_unclaimed = (i == len(SHOP_PRESETS) - 1)  # last one unclaimed
+
             shop, _ = Shop.objects.update_or_create(
                 ops_phone=str(phone_base),
                 defaults={
-                    "display_name": f"Demo Store {i + 1}",
-                    "verticals": ["fashion"] if i % 3 else ["electronics"],
-                    "address_text": f"Shop {i + 1}, Market Road, {city.name}",
+                    "display_name": preset["name"],
+                    "verticals": preset["verticals"],
+                    "address_text": f"Shop {i + 1}, Main Market Road, {city.name}",
                     "city": city, "lat": lat, "lng": lng,
                     "public_phone": f"+91{9000000000 + i}",
                     "whatsapp_number": str(phone_base),
-                    "whatsapp_linked": i % 5 != 0,   # no-WA shops exercise SMS/call fallback
-                    "claimed_at": now if i % 4 != 3 else None,  # a few unclaimed (display only)
+                    "whatsapp_linked": i % 5 != 0,
+                    "claimed_at": None if is_unclaimed else now,
                     "current_plan": plans_cycle[i % len(plans_cycle)],
-                    "accuracy_score": 0.9 + (i % 5) * 0.02,
-                    "hours_text": "10:00–20:00",
+                    "accuracy_score": 0.90 + (i % 5) * 0.02,
+                    "hours_text": "09:30–21:00",
                     "mock_behavior": behavior,
                     "source": "ops",
                 })
             ContactPolicy.objects.get_or_create(shop=shop, defaults={
                 "channels": ["whatsapp", "call"] if behavior.startswith("wa_only") else ["call", "whatsapp"],
                 "language_pref": "hi"})
-            # catalog — choose state so the buyer-side flow demos each behaviour:
-            #   live-checked: always_yes / no_with_alternative / wa_only_yes / conditional
-            #   stale (excluded from fresh matching): unreachable / never_answer
-            keys = ["fashion.dress", "fashion.kurti"] if shop.verticals == ["fashion"] else ["electronics.powerbank"]
-            for key in keys:
+
+            cat_key = preset["catalog"]
+            if cat_key in TAXONOMY:
                 behavior_stale = shop.mock_behavior in ("unreachable", "never_answer")
                 live_checked = shop.mock_behavior not in ("unreachable", "never_answer")
                 CatalogState.objects.update_or_create(
-                    shop=shop, catalog_key=key, superseded_at__isnull=True,
+                    shop=shop, catalog_key=cat_key, superseded_at__isnull=True,
                     defaults={
-                        "label": TAXONOMY[key]["label"],
+                        "label": TAXONOMY[cat_key]["label"],
                         "state": "partial" if live_checked else "in",
                         "size_matrix": {"S": True, "M": True, "L": i % 2 == 0, "XL": False},
-                        "price_band": {"min": 499, "max": 2499},
-                        "color_notes": ["Blue", "Black", "Maroon"] if key == "fashion.dress" else ["White"],
+                        "price_band": {"min": 350, "max": 1800},
+                        "color_notes": ["Blue", "Black", "Maroon"] if "fashion" in preset["verticals"] else ["Standard"],
                         "recorded_by": "portal",
                         "valid_until": valid_until if live_checked else now - timedelta(hours=2),
                     })

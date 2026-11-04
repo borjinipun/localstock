@@ -21,12 +21,24 @@ class AvailabilityRecordSerializer(serializers.ModelSerializer):
     shop_name = serializers.CharField(source="shop.display_name", read_only=True)
     shop_phone = serializers.CharField(source="shop.public_phone", read_only=True)
     shop_hours = serializers.CharField(source="shop.hours_text", read_only=True)
+    distance_km = serializers.SerializerMethodField()
 
     class Meta:
         model = AvailabilityRecord
         fields = ["id", "shop_id", "shop_name", "shop_phone", "shop_hours", "query_id",
+                  "distance_km",
                   "state", "sizes", "colors", "price_text", "condition_text",
                   "evidence_kind", "transcript_snippet", "freshness_at", "publish_state"]
+
+    def get_distance_km(self, obj):
+        try:
+            if obj.query and obj.query.lat and obj.query.lng and obj.shop and obj.shop.lat and obj.shop.lng:
+                from apps.queries.discovery import haversine_km
+                return round(haversine_km(float(obj.query.lat), float(obj.query.lng),
+                                          float(obj.shop.lat), float(obj.shop.lng)), 2)
+        except Exception:
+            pass
+        return None
 
 
 class QueryTargetLiteSerializer(serializers.ModelSerializer):

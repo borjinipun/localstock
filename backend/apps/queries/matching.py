@@ -7,6 +7,7 @@ from django.utils import timezone
 
 from apps.catalog.models import CatalogState
 from apps.catalog.services import TAXONOMY
+from apps.queries.discovery import discover_or_seed_nearby_candidates, haversine_km
 from apps.queries.models import AvailabilityRecord, QueryTarget
 
 WEIGHTS = {"match": 0.34, "proximity": 0.25, "freshness": 0.16, "accuracy": 0.15, "plan": 0.10}
@@ -29,7 +30,7 @@ def _fresh_rows(query):
         )
         .order_by("-created_at")[:400]
     )
-    verticals_intent = {TAXONOMY[c]["vertical"] for c in (query.parsed_intent or {}).get("item_codes", [])}
+    verticals_intent = {TAXONOMY[c]["vertical"] for c in (query.parsed_intent or {}).get("item_codes", []) if c in TAXONOMY}
     if verticals_intent:
         rows = [r for r in rows if r.shop.verticals and set(r.shop.verticals) & verticals_intent]
     return list(rows)
@@ -65,16 +66,8 @@ def _within_radius(query, shop, center) -> float | None:
     """Returns distance km if shop is inside query radius, else None."""
     if not (shop.lat and shop.lng):
         return None
-    d = _haversine_km(*center, float(shop.lat), float(shop.lng))
+    d = haversine_km(*center, float(shop.lat), float(shop.lng))
     return d if d * 1000 <= query.radius_m else None
-
-
-def _haversine_km(lat1, lng1, lat2, lng2):
-    r = 6371
-    p1, p2 = math.radians(lat1), math.radians(lat2)
-    dlat, dlng = math.radians(lat2 - lat1), math.radians(lng2 - lng1)
-    a = math.sin(dlat / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dlng / 2) ** 2
-    return 2 * r * math.asin(math.sqrt(a))
 
 
 def _instant_record(query, intent, row):
@@ -111,8 +104,7 @@ def _live_target(query, intent, row, center):
 
 def build_targets(query) -> dict:
     """Creates QueryTarget rows + instant records per docs 02 F-M-01/02.
-    Auto-wave suppressed when ≥5 instant catalog answers exist and user didn't
-    force a spot check (docs F-M-02)."""
+    Combines instant catalog hits with nearby candidate discovery for Products and Services."""
     intent = query.parsed_intent or {}
     center = (float(query.lat), float(query.lng)) if query.lat and query.lng else (
         float(query.city.center_lat), float(query.city.center_lng))
@@ -123,7 +115,7 @@ def build_targets(query) -> dict:
     for row in rows:
         shop = row.shop
         if shop.id in seen_shop_ids:
-            continue          # dedupe: one target per shop (docs 02 F-M-02/F-M-03)
+            continue
         if (shop.lat and shop.lng) and _within_radius(query, shop, center) is None:
             continue
         size = intent.get("size")
@@ -137,8 +129,54 @@ def build_targets(query) -> dict:
                 kept_targets.append(t)
         seen_shop_ids.add(shop.id)
 
+    # Nearby place discovery engine for candidates with contact numbers (Products & Services)
+    # Only discover/seed if we have fewer than 2 candidates from catalog/DB
+    nearby_candidates = discover_or_seed_nearby_candidates(
+        center_lat=center[0],
+        center_lng=center[1],
+        radius_m=query.radius_m,
+        intent=intent,
+        city=query.city,
+        min_count=2 if (len(instant_ids) + len(kept_targets)) >= 2 else 3,
+    )
+    for cand in nearby_candidates:
+        cand_shop = cand["shop"]
+        if cand_shop.id in seen_shop_ids:
+            continue
+        # Unclaimed shops in demo are ignored unless opted or placed
+        if cand_shop.claimed_at is None and cand_shop.source != "place_seed":
+            continue
+
+        dist_km = cand["distance_km"]
+        proximity = max(0.0, 1.0 - (dist_km * 1000 / max(query.radius_m, 1)))
+        cap_score = cand["capability_score"]
+        accuracy = float(cand_shop.accuracy_score or Decimal("0.90"))
+        plan = PLAN_BOOST.get(cand_shop.current_plan, 0.03)
+        score = round(
+            WEIGHTS["match"] * cap_score
+            + WEIGHTS["proximity"] * proximity
+            + WEIGHTS["freshness"] * 0.8
+            + WEIGHTS["accuracy"] * accuracy
+            + WEIGHTS["plan"] * plan,
+            4,
+        )
+
+        t = QueryTarget.objects.create(
+            query=query,
+            shop=cand_shop,
+            match_score=score,
+            contact_decision={
+                "distance_km": dist_km,
+                "capability_score": cap_score,
+                "contact_number": cand["contact_number"],
+                "source": cand_shop.source,
+                "channels": getattr(cand_shop, "contact_policy", None).channels if getattr(cand_shop, "contact_policy", None) else ["call"],
+            },
+        )
+        kept_targets.append(t)
+        seen_shop_ids.add(cand_shop.id)
+
     if len(instant_ids) >= 5 and not query.spot_check:
-        # leave targets unstarted; user can tap "Check a few more" → extend flow
         return {"instant": instant_ids, "wave": [], "held_for_spot_check": True}
 
     kept_targets.sort(key=lambda t: -float(t.match_score))
@@ -182,3 +220,4 @@ def build_extra_targets(query, limit: int | None = None) -> list[int]:
         if t is not None:
             created.append(t.id)
     return created
+
