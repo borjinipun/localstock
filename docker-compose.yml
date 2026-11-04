@@ -1,0 +1,85 @@
+version: "3.9"
+
+# Local MVP stack. Providers run in MOCK mode (see backend/.env.example).
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: localstock
+      POSTGRES_USER: localstock
+      POSTGRES_PASSWORD: localstock
+    ports: ["5432:5432"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U localstock"]
+      interval: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+
+  api:
+    build:
+      context: ./backend
+      args:
+        PYTHON: "3.12"
+    command: ["/app/entrypoint.sh", "api"]
+    environment:
+      DATABASE_URL: postgres://localstock:localstock@db:5432/localstock
+      REDIS_URL: redis://redis:6379/0
+      VOICESVC_URL: http://voice:8001
+      SERVICE_TOKEN: dev-service-token
+      DJANGO_DEBUG: "1"
+      API_INTERNAL_URL: http://api:8000/api/internal/verification/update/
+      SEED_DEMO: "1"
+      DJANGO_SUPERUSER: "1"
+    ports: ["8000:8000"]
+    volumes: ["./backend:/app"]
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  worker:
+    build:
+      context: ./backend
+      args:
+        PYTHON: "3.12"
+    command: ["celery", "-A", "config", "worker", "-B", "-l", "info"]
+    environment:
+      DATABASE_URL: postgres://localstock:localstock@db:5432/localstock
+      REDIS_URL: redis://redis:6379/0
+      VOICESVC_URL: http://voice:8001
+      SERVICE_TOKEN: dev-service-token
+      DJANGO_DEBUG: "1"
+      API_INTERNAL_URL: http://api:8000/api/internal/verification/update/
+    volumes: ["./backend:/app"]
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  voice:
+    build:
+      context: ./voice-svc
+      args:
+        PYTHON: "3.12"
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001"]
+    environment:
+      SERVICE_TOKEN: dev-service-token
+      API_INTERNAL_URL: http://api:8000/api/internal/verification/update/
+      MOCK_DELAY_SECONDS: "10"
+    ports: ["8001:8001"]
+    volumes: ["./voice-svc:/app"]
+
+  web:
+    image: node:20-alpine
+    working_dir: /app
+    command: sh -c "npm install --no-audit --no-fund && npm run dev"
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+    ports: ["3000:3000"]
+    volumes: ["./web:/app"]
+    depends_on: [api]

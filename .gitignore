@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyc
+.venv/
+.venv-voice/
+venv/
+voiceenv/
+*.sqlite3
+.mypy_cache/
+.pytest_cache/
+
+# Node
+node_modules/
+.next/
+out/
+build/
+dist/
+
+# Infra / env
+.env
+.env.local
+*.log
+.idea/
+.vscode/
+.DS_Store
+*.pem
+
+# Build artifacts
+tsconfig.tsbuildinfo
+*.tsbuildinfo
