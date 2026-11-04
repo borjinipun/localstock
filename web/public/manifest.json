@@ -1,0 +1,16 @@
+{
+  "name": "LocalStock",
+  "short_name": "LocalStock",
+  "description": "Real-time local inventory and service finder for India",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F2F2F7",
+  "theme_color": "#007AFF",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}
