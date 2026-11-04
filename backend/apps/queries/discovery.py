@@ -277,3 +277,4 @@ def discover_or_seed_nearby_candidates(
     all_candidates = existing + created
     all_candidates.sort(key=lambda x: (-x["capability_score"], x["distance_km"]))
     return all_candidates
+
